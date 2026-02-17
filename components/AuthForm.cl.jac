@@ -10,63 +10,66 @@ def:pub AuthForm(
     onPasswordChange: any,
     onSubmit: any,
     onToggleMode: any
-) -> any {
+) -> obj {
     return
         <div className="auth-container">
             <div className="auth-card">
-                <div className="auth-header">
-                    <div className="auth-logo">
-                        TaskFlow
-                    </div>
-                    <h1 className="auth-title">TaskFlow</h1>
-                    <p className="auth-subtitle">
-                        {("Create your account" if isSignup else "Welcome back")}
+                <div style={{"textAlign": "center", "marginBottom": "2rem"}}>
+                    <h1 className="app-title" style={{"fontSize": "2rem", "marginBottom": "0.5rem"}}>
+                        PriceComparator
+                    </h1>
+                    <p className="app-subtitle">
+                        Compare prices across stores with AI
                     </p>
                 </div>
-                {(
-                    <div className="auth-error">{error}</div>
-                ) if error else None}
                 <form onSubmit={onSubmit}>
-                    <div className="form-field">
+                    <div className="form-group">
                         <label className="form-label">Username</label>
                         <input
                             type="text"
                             value={username}
                             onChange={onUsernameChange}
+                            className="form-input"
                             placeholder="Enter username"
-                            className="auth-input"
+                            disabled={loading}
                         />
                     </div>
-                    <div className="form-field-last">
+                    <div className="form-group">
                         <label className="form-label">Password</label>
                         <input
                             type="password"
                             value={password}
                             onChange={onPasswordChange}
+                            className="form-input"
                             placeholder="Enter password"
-                            className="auth-input"
+                            disabled={loading}
                         />
                     </div>
-                    <button type="submit" disabled={loading} className="auth-submit">
+                    {(
+                        <div className="error-message">{error}</div>
+                    ) if error else None}
+                    <button
+                        type="submit"
+                        className="btn-submit"
+                        disabled={loading}
+                    >
                         {(
-                            "Processing..."
-                            if loading
-                            else ("Create Account" if isSignup else "Sign In")
+                            "Loading..." if loading else (
+                                "Sign Up" if isSignup else "Sign In"
+                            )
                         )}
                     </button>
                 </form>
                 <div className="auth-toggle">
-                    <span className="auth-toggle-text">
+                    <span style={{"color": "rgba(255,255,255,0.6)"}}>
                         {(
-                            "Already have an account? "
-                            if isSignup
-                            else "Don't have an account? "
+                            "Already have an account?" if isSignup else "Don't have an account?"
                         )}
                     </span>
                     <button
-                        type="button"
                         onClick={onToggleMode}
-                        className="auth-toggle-btn"
+                        className="btn-link"
+                        disabled={loading}
                     >
                         {("Sign In" if isSignup else "Sign Up")}
                     </button>

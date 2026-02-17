@@ -1,16 +1,17 @@
-"""Todo App - Client-Side UI."""
+"""Price Comparator - Client-Side UI."""
 
 import from "@jac/runtime" { jacSignup, jacLogin, jacLogout, jacIsLoggedIn }
 
 import "./styles.css";
 
-import from .components.TodoItem { TodoItem }
-import from .components.AuthForm { AuthForm }
-import from .components.IngredientItem { IngredientItem }
+import from components.ProductItem { ProductItem }
+import from components.StoreItem { StoreItem }
+import from components.AuthForm { AuthForm }
 
 sv import from main {
-    AddTodo, ListTodos, ToggleTodo, DeleteTodo,
-    GenerateShoppingList, ListMealPlan, ClearMealPlan
+    AddProduct, ListProducts, DeleteProduct,
+    AddStorePrice, ListStorePrices, UpdateStorePrice, DeleteStore,
+    GetBestPrice, ComparePrices
 }
 
 def:pub app -> any {
@@ -21,12 +22,18 @@ def:pub app -> any {
         password: str = "",
         error: str = "",
         loading: bool = False,
-        todos: list = [],
-        newTodoText: str = "",
-        todosLoading: bool = True,
-        mealInput: str = "",
-        ingredients: list = [],
-        ingredientsLoading: bool = False;
+        products: list = [],
+        newProductName: str = "",
+        productsLoading: bool = True,
+        selectedProductId: str = "",
+        selectedProductName: str = "",
+        stores: list = [],
+        storesLoading: bool = False,
+        newStoreName: str = "",
+        newStorePrice: str = "",
+        newStoreUrl: str = "",
+        comparison: any = None,
+        comparisonLoading: bool = False;
 
     can with entry {
         isLoggedIn = jacIsLoggedIn();
@@ -35,26 +42,26 @@ def:pub app -> any {
 
     can with [isLoggedIn] entry {
         if isLoggedIn {
-            fetchTodos();
-            fetchMealPlan();
+            fetchProducts();
         }
     }
 
     # Method declarations (implementations in frontend.impl.jac)
-    async def fetchTodos -> None;
-    async def addTodo -> None;
-    async def toggleTodo(todoId: str) -> None;
-    async def deleteTodo(todoId: str) -> None;
+    async def fetchProducts -> None;
+    async def addProduct -> None;
+    async def deleteProduct(productId: str) -> None;
+    async def selectProduct(productId: str, productName: str) -> None;
+    async def fetchStores(productId: str) -> None;
+    async def addStore -> None;
+    async def deleteStore(storeName: str) -> None;
+    async def compareAllPrices -> None;
     async def handleLogin -> None;
     async def handleSignup -> None;
     def handleLogout -> None;
     async def handleSubmit(e: any) -> None;
-    def handleTodoKeyPress(e: any) -> None;
-    async def fetchMealPlan -> None;
-    async def generateIngredients -> None;
-    async def clearIngredients -> None;
-    def handleMealKeyPress(e: any) -> None;
-    def getIngredientsTotal -> float;
+    def handleProductKeyPress(e: any) -> None;
+    def handleStoreKeyPress(e: any) -> None;
+    def getBestPrice -> any;
 
     if checkingAuth {
         return
@@ -66,16 +73,16 @@ def:pub app -> any {
     }
 
     if isLoggedIn {
-        totalCost = getIngredientsTotal();
+        bestPrice = getBestPrice();
         return
             <div className="app-container">
                 <div className="app-content">
                     <div className="card">
                         <div className="card-header">
                             <div>
-                                <h1 className="app-title">TaskFlow</h1>
+                                <h1 className="app-title">PriceComparator</h1>
                                 <p className="app-subtitle">
-                                    Todo list with AI meal planning
+                                    Compare prices across multiple stores with AI insights
                                 </p>
                             </div>
                             <button onClick={handleLogout} className="btn-signout">
@@ -86,17 +93,18 @@ def:pub app -> any {
                     <div className="two-column-layout">
                         <div className="column-left">
                             <div className="card">
+                                <h2 className="panel-title">Products</h2>
                                 <div className="add-row">
                                     <input
                                         type="text"
-                                        value={newTodoText}
-                                        onChange={lambda e: any -> None { newTodoText = e.target.value; }}
-                                        onKeyPress={handleTodoKeyPress}
-                                        placeholder="What needs to be done?"
+                                        value={newProductName}
+                                        onChange={lambda e: any -> None { newProductName = e.target.value; }}
+                                        onKeyPress={handleProductKeyPress}
+                                        placeholder="Enter product name..."
                                         className="todo-input"
                                     />
                                     <button
-                                        onClick={lambda -> None { addTodo(); }}
+                                        onClick={lambda -> None { addProduct(); }}
                                         className="btn-add"
                                     >
                                         Add
@@ -105,94 +113,169 @@ def:pub app -> any {
                             </div>
                             <div className="card">
                                 {(
-                                    <div className="loading-message">Loading tasks...</div>
-                                ) if todosLoading else (
+                                    <div className="loading-message">Loading products...</div>
+                                ) if productsLoading else (
                                     <div>
                                         {(
                                             <div className="empty-message">
-                                                No tasks yet. Add one above!
+                                                No products yet. Add one above!
                                             </div>
-                                        ) if todos.length == 0 else (
+                                        ) if products.length == 0 else (
                                             <div>
                                                 {[
-                                                    <TodoItem
-                                                        key={todo.id}
-                                                        todo={todo}
-                                                        onToggle={toggleTodo}
-                                                        onDelete={deleteTodo}
-                                                    /> for todo in todos
+                                                    <ProductItem
+                                                        key={product.id}
+                                                        product={product}
+                                                        isSelected={product.id == selectedProductId}
+                                                        onSelect={selectProduct}
+                                                        onDelete={deleteProduct}
+                                                    /> for product in products
                                                 ]}
                                             </div>
                                         )}
                                     </div>
                                 )}
-                            </div>
-                            <div className="remaining-count">
-                                {todos.filter(
-                                    lambda t: any -> bool { return not t.completed; }
-                                ).length} items remaining
                             </div>
                         </div>
                         <div className="column-right">
-                            <div className="card">
-                                <h2 className="panel-title">Meal Planner</h2>
-                                <p className="panel-subtitle">
-                                    Describe a meal to generate a shopping list
-                                </p>
-                                <div className="add-row">
-                                    <input
-                                        type="text"
-                                        value={mealInput}
-                                        onChange={lambda e: any -> None { mealInput = e.target.value; }}
-                                        onKeyPress={handleMealKeyPress}
-                                        placeholder="e.g. spaghetti bolognese for 4"
-                                        className="todo-input"
-                                    />
-                                    <button
-                                        onClick={lambda -> None { generateIngredients(); }}
-                                        disabled={ingredientsLoading}
-                                        className="btn-generate"
-                                    >
-                                        {("Generating..." if ingredientsLoading else "Generate")}
-                                    </button>
-                                </div>
-                            </div>
-                            <div className="card">
-                                {(
-                                    <div className="loading-message">
-                                        <div className="generating-spinner"></div>
-                                        Generating shopping list with AI...
+                            {(
+                                <div className="card">
+                                    <div className="empty-message">
+                                        Select a product to view and compare prices
                                     </div>
-                                ) if ingredientsLoading else (
-                                    <div>
-                                        {(
-                                            <div className="empty-message">
-                                                Enter a meal above to generate ingredients.
-                                            </div>
-                                        ) if ingredients.length == 0 else (
+                                </div>
+                            ) if not selectedProductId else (
+                                <div>
+                                    <div className="card">
+                                        <div style={{"display": "flex", "justifyContent": "space-between", "alignItems": "center", "marginBottom": "1rem"}}>
                                             <div>
-                                                {[
-                                                    <IngredientItem
-                                                        key={ing.name}
-                                                        ingredient={ing}
-                                                    /> for ing in ingredients
-                                                ]}
-                                                <div className="ingredients-footer">
-                                                    <div className="ingredients-total">
-                                                        Total: ${totalCost.toFixed(2)}
+                                                <h2 className="panel-title">{selectedProductName}</h2>
+                                                <p className="panel-subtitle">Add stores and prices</p>
+                                            </div>
+                                            <button
+                                                onClick={lambda -> None { compareAllPrices(); }}
+                                                disabled={comparisonLoading or stores.length < 2}
+                                                className="btn-generate"
+                                                style={{"fontSize": "0.9rem", "padding": "0.5rem 1rem"}}
+                                            >
+                                                {("Analyzing..." if comparisonLoading else "Compare All")}
+                                            </button>
+                                        </div>
+                                        <div className="add-row" style={{"gap": "0.5rem", "flexWrap": "wrap"}}>
+                                            <input
+                                                type="text"
+                                                value={newStoreName}
+                                                onChange={lambda e: any -> None { newStoreName = e.target.value; }}
+                                                placeholder="Store name"
+                                                className="todo-input"
+                                                style={{"flex": "1", "minWidth": "120px"}}
+                                            />
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                value={newStorePrice}
+                                                onChange={lambda e: any -> None { newStorePrice = e.target.value; }}
+                                                onKeyPress={handleStoreKeyPress}
+                                                placeholder="Price"
+                                                className="todo-input"
+                                                style={{"width": "100px"}}
+                                            />
+                                            <input
+                                                type="text"
+                                                value={newStoreUrl}
+                                                onChange={lambda e: any -> None { newStoreUrl = e.target.value; }}
+                                                placeholder="URL (optional)"
+                                                className="todo-input"
+                                                style={{"flex": "1", "minWidth": "150px"}}
+                                            />
+                                            <button
+                                                onClick={lambda -> None { addStore(); }}
+                                                className="btn-add"
+                                            >
+                                                Add
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {(
+                                        <div className="card">
+                                            <div className="comparison-panel">
+                                                <h3 style={{"margin": "0 0 1rem 0", "fontSize": "1.1rem", "color": "rgba(255,255,255,0.9)"}}>
+                                                    AI Analysis
+                                                </h3>
+                                                <div style={{"display": "grid", "gap": "0.75rem"}}>
+                                                    <div className="stat-item">
+                                                        <span className="stat-label">Best Deal:</span>
+                                                        <span className="stat-value" style={{"color": "#4ade80"}}>
+                                                            {comparison.best_store}
+                                                        </span>
                                                     </div>
-                                                    <button
-                                                        onClick={lambda -> None { clearIngredients(); }}
-                                                        className="btn-clear"
-                                                    >
-                                                        Clear
-                                                    </button>
+                                                    <div className="stat-item">
+                                                        <span className="stat-label">Worst Deal:</span>
+                                                        <span className="stat-value" style={{"color": "#f87171"}}>
+                                                            {comparison.worst_store}
+                                                        </span>
+                                                    </div>
+                                                    <div className="stat-item">
+                                                        <span className="stat-label">Average Price:</span>
+                                                        <span className="stat-value">
+                                                            ${comparison.avg_price.toFixed(2)}
+                                                        </span>
+                                                    </div>
+                                                    <div style={{"marginTop": "0.5rem", "padding": "1rem", "background": "rgba(255,255,255,0.05)", "borderRadius": "8px", "borderLeft": "3px solid #3b82f6"}}>
+                                                        <div style={{"fontSize": "0.85rem", "color": "rgba(255,255,255,0.6)", "marginBottom": "0.5rem"}}>
+                                                            Recommendation
+                                                        </div>
+                                                        <div style={{"color": "rgba(255,255,255,0.9)", "lineHeight": "1.5"}}>
+                                                            {comparison.recommendation}
+                                                        </div>
+                                                    </div>
                                                 </div>
+                                            </div>
+                                        </div>
+                                    ) if comparison else None}
+                                    <div className="card">
+                                        {(
+                                            <div className="loading-message">Loading stores...</div>
+                                        ) if storesLoading else (
+                                            <div>
+                                                {(
+                                                    <div className="empty-message">
+                                                        No stores added yet. Add prices above!
+                                                    </div>
+                                                ) if stores.length == 0 else (
+                                                    <div>
+                                                        {(bestPrice) and (
+                                                            <div className="best-price-banner">
+                                                                <div style={{"display": "flex", "alignItems": "center", "gap": "0.5rem"}}>
+                                                                    <span style={{"fontSize": "1.5rem"}}>🏆</span>
+                                                                    <div>
+                                                                        <div style={{"fontWeight": "600", "color": "rgba(255,255,255,0.9)"}}>
+                                                                            Best Price: {bestPrice.name}
+                                                                        </div>
+                                                                        <div style={{"fontSize": "0.85rem", "color": "rgba(255,255,255,0.6)"}}>
+                                                                            ${bestPrice.price.toFixed(2)}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                        <div style={{"marginTop": "1rem"}}>
+                                                            {[
+                                                                <StoreItem
+                                                                    key={store.name}
+                                                                    store={store}
+                                                                    onDelete={deleteStore}
+                                                                    isBest={bestPrice and store.name == bestPrice.name}
+                                                                /> for store in stores
+                                                            ]}
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
                                     </div>
-                                )}
-                            </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -212,5 +295,3 @@ def:pub app -> any {
             onToggleMode={lambda -> None { isSignup = not isSignup; error = ""; }}
         />;
 }
-
-

@@ -1,49 +1,105 @@
-"""Implementations for the Todo App frontend component."""
+"""Implementations for the Price Comparator frontend component."""
 
-impl app.fetchTodos -> None {
-    todosLoading = True;
-    result = root spawn ListTodos();
-    todos = result.reports[0] if result.reports else [];
-    todosLoading = False;
+impl app.fetchProducts -> None {
+    productsLoading = True;
+    result = root spawn ListProducts();
+    products = result.reports[0] if result.reports else [];
+    productsLoading = False;
 }
 
-impl app.addTodo -> None {
-    if not newTodoText.trim() { return; }
-    response = root spawn AddTodo(title=newTodoText);
-    newTodo = response.reports[0];
-    todos = todos.concat([{
-        "id": newTodo.id,
-        "title": newTodo.title,
-        "completed": newTodo.completed,
-        "category": newTodo.category,
-        "priority": newTodo.priority
+impl app.addProduct -> None {
+    if not newProductName.trim() { return; }
+    response = root spawn AddProduct(name=newProductName);
+    newProduct = response.reports[0];
+    products = products.concat([{
+        "id": newProduct.id,
+        "name": newProduct.name,
+        "category": newProduct.category
     }]);
-    newTodoText = "";
+    newProductName = "";
 }
 
-impl app.toggleTodo(todoId: str) -> None {
-    root spawn ToggleTodo(todo_id=todoId);
-    todos = todos.map(
-        lambda t: any -> any {
-            if t.id == todoId {
-                return {
-                    "id": t.id, 
-                    "title": t.title,
-                    "completed": not t.completed, 
-                    "category": t.category,
-                    "priority": t.priority
-                };
-            }
-            return t;
+impl app.deleteProduct(productId: str) -> None {
+    root spawn DeleteProduct(product_id=productId);
+    products = products.filter(
+        lambda p: any -> bool { return p.id != productId; }
+    );
+    if selectedProductId == productId {
+        selectedProductId = "";
+        selectedProductName = "";
+        stores = [];
+        comparison = None;
+    }
+}
+
+impl app.selectProduct(productId: str, productName: str) -> None {
+    selectedProductId = productId;
+    selectedProductName = productName;
+    comparison = None;
+    await fetchStores(productId);
+}
+
+impl app.fetchStores(productId: str) -> None {
+    storesLoading = True;
+    result = root spawn ListStorePrices(product_id=productId);
+    stores = result.reports[0] if result.reports else [];
+    storesLoading = False;
+}
+
+impl app.addStore -> None {
+    if not newStoreName.trim() or not newStorePrice { return; }
+    priceValue = parseFloat(newStorePrice);
+    if isNaN(priceValue) or priceValue < 0 { return; }
+    
+    currentDate =  Date().toISOString();
+    response = root spawn AddStorePrice(
+        product_id=selectedProductId,
+        store_name=newStoreName,
+        price=priceValue,
+        url=newStoreUrl,
+        last_updated=currentDate
+    );
+    
+    if response.reports and response.reports.length > 0 {
+        stores = stores.concat([{
+            "name": newStoreName,
+            "price": priceValue,
+            "available": True,
+            "url": newStoreUrl,
+            "last_updated": currentDate
+        }]);
+        newStoreName = "";
+        newStorePrice = "";
+        newStoreUrl = "";
+        comparison = None;
+    }
+}
+
+impl app.deleteStore(storeName: str) -> None {
+    root spawn DeleteStore(
+        product_id=selectedProductId,
+        store_name=storeName
+    );
+    stores = stores.filter(
+        lambda s: any -> bool { return s.name != storeName; }
+    );
+    comparison = None;
+}
+
+impl app.compareAllPrices -> None {
+    if stores.length < 2 { return; }
+    comparisonLoading = True;
+    result = root spawn ComparePrices(
+        product_id=selectedProductId,
+        product_name=selectedProductName
+    );
+    if result.reports and result.reports.length > 0 {
+        compData = result.reports[0];
+        if not compData.error {
+            comparison = compData;
         }
-    );
-}
-
-impl app.deleteTodo(todoId: str) -> None {
-    root spawn DeleteTodo(todo_id=todoId);
-    todos = todos.filter(
-        lambda t: any -> bool { return t.id != todoId; }
-    );
+    }
+    comparisonLoading = False;
 }
 
 impl app.handleLogin -> None {
@@ -89,9 +145,11 @@ impl app.handleSignup -> None {
 impl app.handleLogout -> None {
     jacLogout();
     isLoggedIn = False;
-    todos = [];
-    ingredients = [];
-    mealInput = "";
+    products = [];
+    stores = [];
+    selectedProductId = "";
+    selectedProductName = "";
+    comparison = None;
 }
 
 impl app.handleSubmit(e: any) -> None {
@@ -103,39 +161,25 @@ impl app.handleSubmit(e: any) -> None {
     }
 }
 
-impl app.handleTodoKeyPress(e: any) -> None {
-    if e.key == "Enter" { addTodo(); }
+impl app.handleProductKeyPress(e: any) -> None {
+    if e.key == "Enter" { addProduct(); }
 }
 
-impl app.fetchMealPlan -> None {
-    result = root spawn ListMealPlan();
-    ingredients = result.reports[0] if result.reports else [];
+impl app.handleStoreKeyPress(e: any) -> None {
+    if e.key == "Enter" { addStore(); }
 }
 
-impl app.generateIngredients -> None {
-    if not mealInput.trim() { return; }
-    ingredientsLoading = True;
-    result = root spawn GenerateShoppingList(meal_description=mealInput);
-    ingredients = result.reports[0] if result.reports else [];
-    ingredientsLoading = False;
-}
-
-impl app.clearIngredients -> None {
-    root spawn ClearMealPlan();
-    ingredients = [];
-    mealInput = "";
-}
-
-impl app.handleMealKeyPress(e: any) -> None {
-    if e.key == "Enter" { generateIngredients(); }
-}
-
-impl app.getIngredientsTotal -> float {
-    total = 0.0;
-    for ing in ingredients {
-        total = total + ing.cost;
+impl app.getBestPrice -> any {
+    if stores.length == 0 { return None; }
+    availableStores = stores.filter(
+        lambda s: any -> bool { return s.available; }
+    );
+    if availableStores.length == 0 { return None; }
+    best = availableStores[0];
+    for store in availableStores {
+        if store.price < best.price {
+            best = store;
+        }
     }
-    return total;
+    return best;
 }
-
-

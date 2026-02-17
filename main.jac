@@ -1,9 +1,9 @@
-"""TaskFlow - A multi-user todo app with AI meal planning."""
+"""PriceComparator - A multi-user price comparison app with AI-powered analysis."""
 
 cl {
     import from frontend { app as ClientApp }
 
-    def:pub app -> any {
+    def:pub app {
         return <ClientApp />;
     }
 }
@@ -11,198 +11,296 @@ cl {
 import from byllm.lib { Model }
 import from uuid { uuid4 }
 
-
 glob llm = Model(model_name="gemini/gemini-2.5-flash");
+
 # --- AI Types ---
 
-enum Category { WORK, PERSONAL, SHOPPING, HEALTH, OTHER }
-enum Priority { HIGH, MEDIUM, LOW }
-enum Unit { PIECE, LB, OZ, CUP, TBSP, TSP, CLOVE, BUNCH }
+enum ProductCategory { ELECTRONICS, GROCERIES, CLOTHING, HOME, HEALTH, OTHER }
+enum PriceRange { BUDGET, MODERATE, PREMIUM, LUXURY }
 
-obj Ingredient {
-    has name: str;
-    has quantity: float;
-    has unit: Unit;
-    has cost: float;
-    has carby: bool;
+obj PriceAnalysis {
+    has best_store: str;
+    has worst_store: str;
+    has avg_price: float;
+    has recommendation: str;
 }
 
-sem Ingredient.cost = "Estimated cost in USD";
-sem Ingredient.carby = "True if this ingredient is high in carbohydrates";
+sem PriceAnalysis.recommendation = "A brief recommendation on where to buy based on price comparison";
 
-"""Categorize a todo based on its title."""
-def categorize(title: str) -> Category by llm();
+"""Categorize a product based on its name."""
+def categorize_product(product_name: str) -> ProductCategory by llm();
 
-"""Determine the priority level of a todo based on its title."""
-def prioritize(title: str) -> Priority by llm();
+"""Determine the price range category of a product based on its price."""
+def classify_price_range(price: float, product_name: str) -> PriceRange by llm();
 
-"""Generate a shopping list of ingredients needed for a described meal."""
-def generate_ingredients(meal_description: str) -> list[Ingredient] by llm();
+"""Analyze price data and provide recommendation."""
+def analyze_prices(product_name: str, store_prices: list[dict]) -> PriceAnalysis by llm();
 
 # --- Data Nodes ---
 
-node Todo {
+node Product {
     has id: str,
-        title: str,
-        completed: bool = False,
-        priority: str = "medium",
+        name: str,
         category: str = "other";
 }
 
-node MealIngredient {
+node Store {
     has name: str,
-        quantity: float,
-        unit: str,
-        cost: float,
-        carby: bool;
+        price: float,
+        last_updated: str = "",
+        available: bool = True,
+        url: str = "";
 }
+# --- Product Walkers ---
 
-# --- Todo Walkers ---
-
-walker:priv AddTodo {
+walker:priv AddProduct {
     has title: str;
 
     can create with Root entry {
-        category = str(categorize(self.title)).split(".")[-1].lower();
-        priority_val = str(prioritize(self.title)).split(".")[-1].lower();
+        category = str(categorize_product(self.title)).split(".")[-1].lower();
         
-        new_todo = here ++> Todo(
+        new_product = here ++> Product(
             id=str(uuid4()),
-            title=self.title,
-            category=category,
-            priority=priority_val
+            name=self.title,
+            category=category
         );
         report {
-            "id": new_todo[0].id,
-            "title": new_todo[0].title,
-            "completed": new_todo[0].completed,
-            "category": new_todo[0].category,
-            "priority": new_todo[0].priority
+            "id": new_product[0].id,
+            "name": new_product[0].name,
+            "category": new_product[0].category
         };
     }
 }
 
-walker:priv ListTodos {
-    has todos: list = [];
+walker:priv ListProducts {
+    has products: list = [];
 
     can collect with Root entry {
         visit [-->];
     }
 
-    can gather with Todo entry {
-        self.todos.append({
+    can gather with Product entry {
+        self.products.append({
             "id": here.id,
-            "title": here.title,
-            "completed": here.completed,
-            "category": here.category,
-            "priority": here.priority
-        });
-    }
-
-    can report_all with Root exit {
-        report self.todos;
-    }
-}
-
-walker:priv ToggleTodo {
-    has todo_id: str;
-
-    can search with Root entry {
-        visit [-->];
-    }
-
-    can toggle with Todo entry {
-        if here.id == self.todo_id {
-            here.completed = not here.completed;
-            report {
-                "id": here.id,
-                "completed": here.completed
-            };
-        }
-    }
-}
-
-walker:priv DeleteTodo {
-    has todo_id: str;
-
-    can search with Root entry {
-        visit [-->];
-    }
-
-    can delete with Todo entry {
-        if here.id == self.todo_id {
-            del here;
-            report {"deleted": self.todo_id};
-        }
-    }
-}
-
-# --- Meal Planner Walkers ---
-
-walker:priv GenerateShoppingList {
-    has meal_description: str;
-
-    can generate with Root entry {
-        # First clear old ingredients
-        visit [-->];
-        # Then generate new ones
-        ingredients = generate_ingredients(self.meal_description);
-        result: list = [];
-        for ing in ingredients {
-            ing_data = {
-                "name": ing.name,
-                "quantity": ing.quantity,
-                "unit": str(ing.unit).split(".")[-1].lower(),
-                "cost": ing.cost,
-                "carby": ing.carby
-            };
-            here ++> MealIngredient(
-                name=ing_data["name"],
-                quantity=ing_data["quantity"],
-                unit=ing_data["unit"],
-                cost=ing_data["cost"],
-                carby=ing_data["carby"]
-            );
-            result.append(ing_data);
-        }
-        report result;
-    }
-
-    can clear_old with MealIngredient entry {
-        del here;
-    }
-}
-
-walker:priv ListMealPlan {
-    has ingredients: list = [];
-
-    can collect with Root entry {
-        visit [-->];
-    }
-
-    can gather with MealIngredient entry {
-        self.ingredients.append({
             "name": here.name,
-            "quantity": here.quantity,
-            "unit": here.unit,
-            "cost": here.cost,
-            "carby": here.carby
+            "category": here.category
         });
     }
 
     can report_all with Root exit {
-        report self.ingredients;
+        report self.products;
     }
 }
 
-walker:priv ClearMealPlan {
-    can collect with Root entry {
+walker:priv DeleteProduct {
+    has product_id: str;
+
+    can search with Root entry {
         visit [-->];
     }
 
-    can clear with MealIngredient entry {
-        del here;
-        report {"cleared": True};
+    can delete with Product entry {
+        if here.id == self.product_id {
+            del here;
+            report {"deleted": self.product_id};
+        }
     }
 }
 
+# --- Store Price Walkers ---
+
+walker:priv AddStorePrice {
+    has product_id: str;
+    has store_name: str;
+    has price: float;
+    has url: str = "";
+    has last_updated: str = "";
+
+    can search with Root entry {
+        visit [-->];
+    }
+
+    can add_store with Product entry {
+        if here.id == self.product_id {
+            here ++> Store(
+                name=self.store_name,
+                price=self.price,
+                available=True,
+                url=self.url,
+                last_updated=self.last_updated
+            );
+            report {
+                "product_id": here.id,
+                "store": self.store_name,
+                "price": self.price
+            };
+        }
+    }
+}
+
+walker:priv ListStorePrices {
+    has product_id: str;
+    has stores: list = [];
+
+    can search with Root entry {
+        visit [-->];
+    }
+
+    can collect with Product entry {
+        if here.id == self.product_id {
+            visit [-->];
+        }
+    }
+
+    can gather with Store entry {
+        self.stores.append({
+            "name": here.name,
+            "price": here.price,
+            "available": here.available,
+            "url": here.url,
+            "last_updated": here.last_updated
+        });
+    }
+
+    can report_all with Root exit {
+        report self.stores;
+    }
+}
+
+walker:priv UpdateStorePrice {
+    has product_id: str;
+    has store_name: str;
+    has price: float;
+    has last_updated: str = "";
+
+    can search with Root entry {
+        visit [-->];
+    }
+
+    can find_product with Product entry {
+        if here.id == self.product_id {
+            visit [-->];
+        }
+    }
+
+    can update with Store entry {
+        if here.name == self.store_name {
+            here.price = self.price;
+            here.last_updated = self.last_updated;
+            report {
+                "store": here.name,
+                "price": here.price,
+                "updated": True
+            };
+        }
+    }
+}
+
+walker:priv DeleteStore {
+    has product_id: str;
+    has store_name: str;
+
+    can search with Root entry {
+        visit [-->];
+    }
+
+    can find_product with Product entry {
+        if here.id == self.product_id {
+            visit [-->];
+        }
+    }
+
+    can delete with Store entry {
+        if here.name == self.store_name {
+            del here;
+            report {"deleted": self.store_name};
+        }
+    }
+}
+
+walker:priv GetBestPrice {
+    has product_id: str;
+    has stores: list = [];
+
+    can search with Root entry {
+        visit [-->];
+    }
+
+    can find_product with Product entry {
+        if here.id == self.product_id {
+            visit [-->];
+        }
+    }
+
+    can collect with Store entry {
+        self.stores.append({
+            "name": here.name,
+            "price": here.price,
+            "available": here.available,
+            "url": here.url
+        });
+    }
+
+    can analyze with Root exit {
+        if len(self.stores) > 0 {
+            available_stores = [s for s in self.stores if s["available"]];
+            if len(available_stores) > 0 {
+                best = available_stores[0];
+                for store in available_stores {
+                    if store["price"] < best["price"] {
+                        best = store;
+                    }
+                }
+                report {
+                    "best_store": best["name"],
+                    "best_price": best["price"],
+                    "url": best["url"],
+                    "all_stores": available_stores
+                };
+            } else {
+                report {"error": "No available stores"};
+            }
+        } else {
+            report {"error": "No stores found"};
+        }
+    }
+}
+
+walker:priv ComparePrices {
+    has product_id: str;
+    has product_name: str = "";
+    has stores: list = [];
+
+    can search with Root entry {
+        visit [-->];
+    }
+
+    can find_product with Product entry {
+        if here.id == self.product_id {
+            self.product_name = here.name;
+            visit [-->];
+        }
+    }
+
+    can collect with Store entry {
+        self.stores.append({
+            "name": here.name,
+            "price": here.price
+        });
+    }
+
+    can analyze with Root exit {
+        if len(self.stores) > 0 and self.product_name {
+            analysis = analyze_prices(self.product_name, self.stores);
+            report {
+                "best_store": analysis.best_store,
+                "worst_store": analysis.worst_store,
+                "avg_price": analysis.avg_price,
+                "recommendation": analysis.recommendation,
+                "stores": self.stores
+            };
+        } else {
+            report {"error": "No data for comparison"};
+        }
+    }
+}
