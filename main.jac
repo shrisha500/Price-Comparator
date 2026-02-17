@@ -51,7 +51,15 @@ node Store {
         available: bool = True,
         url: str = "";
 }
-# --- Product Walkers ---
+
+# NEW: A standalone global store entry, independent of any product.
+# Lives directly under Root so users can build a reusable list of stores.
+node StoreEntry {
+    has id: str,
+        name: str;
+}
+
+# --- Product Walkers (unchanged) ---
 
 walker:priv AddProduct {
     has title: str;
@@ -107,7 +115,7 @@ walker:priv DeleteProduct {
     }
 }
 
-# --- Store Price Walkers ---
+# --- Store Price Walkers (unchanged) ---
 
 walker:priv AddStorePrice {
     has product_id: str;
@@ -301,6 +309,59 @@ walker:priv ComparePrices {
             };
         } else {
             report {"error": "No data for comparison"};
+        }
+    }
+}
+
+# --- Global Store List Walkers (NEW) ---
+# These three walkers manage the user's personal list of stores.
+# They are completely independent of Products and Store price nodes.
+
+walker:priv AddStoreEntry {
+    has name: str;
+
+    can create with Root entry {
+        new_entry = here ++> StoreEntry(
+            id=str(uuid4()),
+            name=self.name
+        );
+        report {
+            "id": new_entry[0].id,
+            "name": new_entry[0].name
+        };
+    }
+}
+
+walker:priv ListStoreEntries {
+    has entries: list = [];
+
+    can collect with Root entry {
+        visit [-->];
+    }
+
+    can gather with StoreEntry entry {
+        self.entries.append({
+            "id": here.id,
+            "name": here.name
+        });
+    }
+
+    can report_all with Root exit {
+        report self.entries;
+    }
+}
+
+walker:priv DeleteStoreEntry {
+    has store_id: str;
+
+    can search with Root entry {
+        visit [-->];
+    }
+
+    can delete with StoreEntry entry {
+        if here.id == self.store_id {
+            del here;
+            report {"deleted": self.store_id};
         }
     }
 }

@@ -6,12 +6,14 @@ import "./styles.css";
 
 import from components.ProductItem { ProductItem }
 import from components.StoreItem { StoreItem }
+import from components.StoreEntryItem { StoreEntryItem }
 import from components.AuthForm { AuthForm }
 
 sv import from main {
     AddProduct, ListProducts, DeleteProduct,
     AddStorePrice, ListStorePrices, UpdateStorePrice, DeleteStore,
-    GetBestPrice, ComparePrices
+    GetBestPrice, ComparePrices,
+    AddStoreEntry, ListStoreEntries, DeleteStoreEntry
 }
 
 def:pub app -> any {
@@ -22,6 +24,8 @@ def:pub app -> any {
         password: str = "",
         error: str = "",
         loading: bool = False,
+
+        # --- Products (unchanged) ---
         products: list = [],
         newProductName: str = "",
         productsLoading: bool = True,
@@ -33,7 +37,12 @@ def:pub app -> any {
         newStorePrice: str = "",
         newStoreUrl: str = "",
         comparison: any = None,
-        comparisonLoading: bool = False;
+        comparisonLoading: bool = False,
+
+        # --- Global store list (NEW) ---
+        storeEntries: list = [],
+        newStoreEntryName: str = "",
+        storeEntriesLoading: bool = True;
 
     can with entry {
         isLoggedIn = jacIsLoggedIn();
@@ -43,10 +52,11 @@ def:pub app -> any {
     can with [isLoggedIn] entry {
         if isLoggedIn {
             fetchProducts();
+            fetchStoreEntries();   # load the store list alongside products
         }
     }
 
-    # Method declarations (implementations in frontend.impl.jac)
+    # --- Method declarations (product, unchanged) ---
     async def fetchProducts -> None;
     async def addProduct -> None;
     async def deleteProduct(productId: str) -> None;
@@ -62,6 +72,12 @@ def:pub app -> any {
     def handleProductKeyPress(e: any) -> None;
     def handleStoreKeyPress(e: any) -> None;
     def getBestPrice -> any;
+
+    # --- Method declarations (store list, NEW) ---
+    async def fetchStoreEntries -> None;
+    async def addStoreEntry -> None;
+    async def deleteStoreEntry(storeId: str) -> None;
+    def handleStoreEntryKeyPress(e: any) -> None;
 
     if checkingAuth {
         return
@@ -136,6 +152,50 @@ def:pub app -> any {
                                     </div>
                                 )}
                             </div>
+                            <div className="card">
+                                <h2 className="panel-title">Stores</h2>
+                                <p className="panel-subtitle">Add stores you want to track</p>
+                                <div className="add-row">
+                                    <input
+                                        type="text"
+                                        value={newStoreEntryName}
+                                        onChange={lambda e: any -> None { newStoreEntryName = e.target.value; }}
+                                        onKeyPress={handleStoreEntryKeyPress}
+                                        placeholder="Enter store name (e.g. Amazon)..."
+                                        className="todo-input"
+                                    />
+                                    <button
+                                        onClick={lambda -> None { addStoreEntry(); }}
+                                        className="btn-add"
+                                    >
+                                        Add
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="card">
+                                {(
+                                    <div className="loading-message">Loading stores...</div>
+                                ) if storeEntriesLoading else (
+                                    <div>
+                                        {(
+                                            <div className="empty-message">
+                                                No stores yet. Add one above!
+                                            </div>
+                                        ) if storeEntries.length == 0 else (
+                                            <div>
+                                                {[
+                                                    <StoreEntryItem
+                                                        key={store.id}
+                                                        store={store}
+                                                        onDelete={deleteStoreEntry}
+                                                    /> for store in storeEntries
+                                                ]}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
                         </div>
                         <div className="column-right">
                             {(
@@ -277,6 +337,7 @@ def:pub app -> any {
                                 </div>
                             )}
                         </div>
+
                     </div>
                 </div>
             </div>;

@@ -9,7 +9,7 @@ impl app.fetchProducts -> None {
 
 impl app.addProduct -> None {
     if not newProductName.trim() { return; }
-    response = root spawn AddProduct(name=newProductName);
+    response = root spawn AddProduct(title=newProductName);
     newProduct = response.reports[0];
     products = products.concat([{
         "id": newProduct.id,
@@ -182,4 +182,44 @@ impl app.getBestPrice -> any {
         }
     }
     return best;
+}
+
+impl app.fetchStoreEntries -> None {
+    # Load the persisted store list from the server on app startup
+    storeEntriesLoading = True;
+    result = root spawn ListStoreEntries();
+    storeEntries = result.reports[0] if result.reports else [];
+    storeEntriesLoading = False;
+}
+
+impl app.addStoreEntry -> None {
+    # Guard: ignore empty input
+    if not newStoreEntryName.trim() { return; }
+
+    # Spawn AddStoreEntry on the server; it creates a StoreEntry node under Root
+    # and returns the new entry's id + name so we can update local state immediately
+    response = root spawn AddStoreEntry(name=newStoreEntryName);
+
+    if response.reports and response.reports.length > 0 {
+        newEntry = response.reports[0];
+        # Optimistic update: append to the list right away so the UI responds instantly
+        storeEntries = storeEntries.concat([{
+            "id": newEntry.id,
+            "name": newEntry.name
+        }]);
+        newStoreEntryName = "";   # clear the input field
+    }
+}
+
+impl app.deleteStoreEntry(storeId: str) -> None {
+    # Tell the server to delete the StoreEntry node
+    root spawn DeleteStoreEntry(store_id=storeId);
+    # Remove from local list immediately (optimistic update)
+    storeEntries = storeEntries.filter(
+        lambda s: any -> bool { return s.id != storeId; }
+    );
+}
+
+impl app.handleStoreEntryKeyPress(e: any) -> None {
+    if e.key == "Enter" { addStoreEntry(); }
 }
