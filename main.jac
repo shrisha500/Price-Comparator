@@ -15,7 +15,7 @@ glob llm = Model(model_name="gemini/gemini-2.5-flash");
 
 # --- AI Types ---
 
-enum ProductCategory { ELECTRONICS, GROCERIES, CLOTHING, HOME, HEALTH, OTHER }
+enum ProductCategory { PRODUCTIVITY, ELECTRONICS, GROCERIES, CLOTHING, HOME, HEALTH, BEAUTY, BABY, CHILDREN, OTHER }
 enum PriceRange { BUDGET, MODERATE, PREMIUM, LUXURY }
 
 obj PriceAnalysis {
