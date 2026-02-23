@@ -25,7 +25,16 @@ obj PriceAnalysis {
     has recommendation: str;
 }
 
+obj NearbyStore {
+    has name: str;
+    has address: str;
+    has distance_miles: float;
+    has store_type: str;
+}
+
 sem PriceAnalysis.recommendation = "A brief recommendation on where to buy based on price comparison";
+sem NearbyStore.distance_miles = "Estimated distance in miles from the user's location";
+sem NearbyStore.store_type = "Type of store, e.g. supermarket, pharmacy, electronics, department store";
 
 """Categorize a product based on its name."""
 def categorize_product(product_name: str) -> ProductCategory by llm();
@@ -35,6 +44,8 @@ def classify_price_range(price: float, product_name: str) -> PriceRange by llm()
 
 """Analyze price data and provide recommendation."""
 def analyze_prices(product_name: str, store_prices: list[dict]) -> PriceAnalysis by llm();
+"""Given a location, return a list of well-known stores nearby with their estimated distances."""
+def find_nearby_stores(location: str) -> list[NearbyStore] by llm();
 
 # --- Data Nodes ---
 
@@ -363,5 +374,21 @@ walker:priv DeleteStoreEntry {
             del here;
             report {"deleted": self.store_id};
         }
+    }
+}
+
+walker:priv FindNearbyStores {
+    has location: str;
+
+    can search with Root entry {
+        results = find_nearby_stores(self.location);
+        report [
+            {
+                "name": s.name,
+                "address": s.address,
+                "distance": s.distance_miles,
+                "store_type": s.store_type
+            } for s in results
+        ];
     }
 }

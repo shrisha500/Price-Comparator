@@ -1,19 +1,19 @@
-"""Price Comparator - Client-Side UI."""
+"""Price Comparator - Client-Side UI with routing and location search."""
 
 import from "@jac/runtime" { jacSignup, jacLogin, jacLogout, jacIsLoggedIn }
-
 import "./styles.css";
 
 import from components.ProductItem { ProductItem }
 import from components.StoreItem { StoreItem }
 import from components.StoreEntryItem { StoreEntryItem }
 import from components.AuthForm { AuthForm }
+import from components.StoreProductsPage { StoreProductsPage }
 
 sv import from main {
     AddProduct, ListProducts, DeleteProduct,
     AddStorePrice, ListStorePrices, UpdateStorePrice, DeleteStore,
     GetBestPrice, ComparePrices,
-    AddStoreEntry, ListStoreEntries, DeleteStoreEntry
+    AddStoreEntry, ListStoreEntries, DeleteStoreEntry, FindNearbyStores
 }
 
 def:pub app -> any {
@@ -25,7 +25,11 @@ def:pub app -> any {
         error: str = "",
         loading: bool = False,
 
-        # --- Products (unchanged) ---
+        # --- Routing ---
+        currentPage: str = "home",
+        selectedStoreEntry: any = None,
+
+        # --- Products ---
         products: list = [],
         newProductName: str = "",
         productsLoading: bool = True,
@@ -39,10 +43,16 @@ def:pub app -> any {
         comparison: any = None,
         comparisonLoading: bool = False,
 
-        # --- Global store list (NEW) ---
+        # --- Global store list ---
         storeEntries: list = [],
         newStoreEntryName: str = "",
-        storeEntriesLoading: bool = True;
+        storeEntriesLoading: bool = True,
+
+        # --- Location search ---
+        locationQuery: str = "",
+        nearbyStores: list = [],
+        locationLoading: bool = False,
+        locationError: str = "";
 
     can with entry {
         isLoggedIn = jacIsLoggedIn();
@@ -52,11 +62,11 @@ def:pub app -> any {
     can with [isLoggedIn] entry {
         if isLoggedIn {
             fetchProducts();
-            fetchStoreEntries();   # load the store list alongside products
+            fetchStoreEntries();
         }
     }
 
-    # --- Method declarations (product, unchanged) ---
+    # --- Product methods ---
     async def fetchProducts -> None;
     async def addProduct -> None;
     async def deleteProduct(productId: str) -> None;
@@ -73,11 +83,20 @@ def:pub app -> any {
     def handleStoreKeyPress(e: any) -> None;
     def getBestPrice -> any;
 
-    # --- Method declarations (store list, NEW) ---
+    # --- Store list methods ---
     async def fetchStoreEntries -> None;
     async def addStoreEntry -> None;
     async def deleteStoreEntry(storeId: str) -> None;
     def handleStoreEntryKeyPress(e: any) -> None;
+
+    # --- Routing methods ---
+    def navigateToStoreProducts(store: any) -> None;
+    def navigateHome -> None;
+
+    # --- Location search methods ---
+    async def searchNearbyStores -> None;
+    def getUserLocation -> None;
+    def handleLocationKeyPress(e: any) -> None;
 
     if checkingAuth {
         return
@@ -86,6 +105,14 @@ def:pub app -> any {
                          "color": "rgba(255,255,255,0.6)", "fontFamily": "system-ui"}}>
                 Loading...
             </div>;
+    }
+
+    if isLoggedIn and currentPage == "store-products" and selectedStoreEntry {
+        return
+            <StoreProductsPage
+                store={selectedStoreEntry}
+                onBack={navigateHome}
+            />;
     }
 
     if isLoggedIn {
@@ -152,9 +179,12 @@ def:pub app -> any {
                                     </div>
                                 )}
                             </div>
+
                             <div className="card">
                                 <h2 className="panel-title">Stores</h2>
-                                <p className="panel-subtitle">Add stores you want to track</p>
+                                <p className="panel-subtitle">
+                                    Add stores you want to track. Click a store to manage its products.
+                                </p>
                                 <div className="add-row">
                                     <input
                                         type="text"
@@ -188,6 +218,7 @@ def:pub app -> any {
                                                         key={store.id}
                                                         store={store}
                                                         onDelete={deleteStoreEntry}
+                                                        onSelect={navigateToStoreProducts}
                                                     /> for store in storeEntries
                                                 ]}
                                             </div>
@@ -195,9 +226,81 @@ def:pub app -> any {
                                     </div>
                                 )}
                             </div>
-
                         </div>
+
                         <div className="column-right">
+                            # --- Location Search ---
+                            <div className="card">
+                                <h2 className="panel-title">Find Nearby Stores</h2>
+                                <p className="panel-subtitle">
+                                    Enter your city or address to find stores near you
+                                </p>
+                                <div className="add-row" style={{"gap": "0.5rem", "flexWrap": "wrap"}}>
+                                    <input
+                                        type="text"
+                                        value={locationQuery}
+                                        onChange={lambda e: any -> None { locationQuery = e.target.value; }}
+                                        onKeyPress={handleLocationKeyPress}
+                                        placeholder="Enter your location (e.g. Austin, TX)..."
+                                        className="todo-input"
+                                        style={{"flex": "1"}}
+                                    />
+                                    <button
+                                        onClick={lambda -> None { getUserLocation(); }}
+                                        className="btn-add"
+                                        style={{"whiteSpace": "nowrap", "background": "rgba(59,130,246,0.3)", "borderColor": "rgba(59,130,246,0.5)"}}
+                                        title="Use my current location"
+                                    >
+                                        📍 GPS
+                                    </button>
+                                    <button
+                                        onClick={lambda -> None { searchNearbyStores(); }}
+                                        className="btn-add"
+                                        disabled={locationLoading}
+                                    >
+                                        {("Searching..." if locationLoading else "Search")}
+                                    </button>
+                                </div>
+                                {(
+                                    <div className="error-message" style={{"marginTop": "0.5rem"}}>
+                                        {locationError}
+                                    </div>
+                                ) if locationError else None}
+
+                                # --- Nearby store results ---
+                                {(
+                                    <div style={{"marginTop": "1rem"}}>
+                                        {[
+                                            <div
+                                                key={nearbyStore.place_id}
+                                                className="ingredient-item"
+                                                style={{"flexDirection": "column", "alignItems": "flex-start", "gap": "0.25rem"}}
+                                            >
+                                                <div style={{"display": "flex", "justifyContent": "space-between", "width": "100%", "alignItems": "center"}}>
+                                                    <div>
+                                                        <span className="ingredient-name">{nearbyStore.name}</span>
+                                                        <span style={{
+                                                            "fontSize": "0.75rem",
+                                                            "color": "rgba(255,255,255,0.4)",
+                                                            "marginLeft": "0.5rem"
+                                                        }}>
+                                                            {nearbyStore.store_type}
+                                                        </span>
+                                                    </div>
+                                                    <span style={{"fontSize": "0.85rem", "color": "#4ade80", "fontWeight": "600", "whiteSpace": "nowrap"}}>
+                                                        {nearbyStore.distance} mi
+                                                    </span>
+                                                </div>
+                                                <span style={{"fontSize": "0.75rem", "color": "rgba(255,255,255,0.5)"}}>
+                                                    {nearbyStore.address}
+                                                </span>
+                                            </div> for nearbyStore in nearbyStores
+                                        ]}
+                                    </div>
+                                ) if nearbyStores.length > 0 else None}
+                            </div>
+
+                            # --- Price comparison panel ---
                             {(
                                 <div className="card">
                                     <div className="empty-message">
@@ -265,21 +368,15 @@ def:pub app -> any {
                                                 <div style={{"display": "grid", "gap": "0.75rem"}}>
                                                     <div className="stat-item">
                                                         <span className="stat-label">Best Deal:</span>
-                                                        <span className="stat-value" style={{"color": "#4ade80"}}>
-                                                            {comparison.best_store}
-                                                        </span>
+                                                        <span className="stat-value" style={{"color": "#4ade80"}}>{comparison.best_store}</span>
                                                     </div>
                                                     <div className="stat-item">
                                                         <span className="stat-label">Worst Deal:</span>
-                                                        <span className="stat-value" style={{"color": "#f87171"}}>
-                                                            {comparison.worst_store}
-                                                        </span>
+                                                        <span className="stat-value" style={{"color": "#f87171"}}>{comparison.worst_store}</span>
                                                     </div>
                                                     <div className="stat-item">
                                                         <span className="stat-label">Average Price:</span>
-                                                        <span className="stat-value">
-                                                            ${comparison.avg_price.toFixed(2)}
-                                                        </span>
+                                                        <span className="stat-value">${comparison.avg_price.toFixed(2)}</span>
                                                     </div>
                                                     <div style={{"marginTop": "0.5rem", "padding": "1rem", "background": "rgba(255,255,255,0.05)", "borderRadius": "8px", "borderLeft": "3px solid #3b82f6"}}>
                                                         <div style={{"fontSize": "0.85rem", "color": "rgba(255,255,255,0.6)", "marginBottom": "0.5rem"}}>
@@ -337,7 +434,6 @@ def:pub app -> any {
                                 </div>
                             )}
                         </div>
-
                     </div>
                 </div>
             </div>;

@@ -2,16 +2,33 @@
 
 def:pub StoreEntryItem(
     store: dict,
-    onDelete: any
+    onDelete: any,
+    onSelect: any   # NEW: called when the store name is clicked
 ) -> obj {
     return
         <div className="ingredient-item">
-            <div className="ingredient-info">
-                <span className="ingredient-name">{store.name}</span>
+            <div
+                className="ingredient-info"
+                onClick={lambda -> None { onSelect(store); }}
+                style={{"cursor": "pointer", "flex": "1"}}
+                title="Click to manage products for this store"
+            >
+                <span
+                    className="ingredient-name"
+                    style={{"textDecoration": "underline dotted", "color": "rgba(255,255,255,0.9)"}}
+                >
+                    {store.name}
+                </span>
+                <span style={{"fontSize": "0.75rem", "color": "rgba(255,255,255,0.4)", "marginLeft": "0.5rem"}}>
+                    → view products
+                </span>
             </div>
             <div className="ingredient-meta">
                 <button
-                    onClick={lambda -> None { onDelete(store.id); }}
+                    onClick={lambda e: any -> None {
+                        e.stopPropagation();
+                        onDelete(store.id);
+                    }}
                     className="btn-delete"
                     style={{"marginLeft": "0.5rem"}}
                 >
