@@ -151,6 +151,20 @@ impl app.addStoreEntry -> None {
     }
 }
 
+impl app.addStoreEntryDirect(name: str) -> None {
+    if not name.trim() { return; }
+    # Avoid adding duplicates
+    alreadyExists = storeEntries.filter(
+        lambda s: any -> bool { return s.name.toLowerCase() == name.toLowerCase(); }
+    ).length > 0;
+    if alreadyExists { return; }
+    response = root spawn AddStoreEntry(name=name);
+    if response.reports and response.reports.length > 0 {
+        newEntry = response.reports[0];
+        storeEntries = storeEntries.concat([{"id": newEntry.id, "name": newEntry.name}]);
+    }
+}
+
 impl app.deleteStoreEntry(storeId: str) -> None {
     root spawn DeleteStoreEntry(store_id=storeId);
     storeEntries = storeEntries.filter(lambda s: any -> bool { return s.id != storeId; });

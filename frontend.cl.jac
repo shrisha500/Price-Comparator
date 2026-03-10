@@ -3,7 +3,6 @@
 import from "@jac/runtime" { jacSignup, jacLogin, jacLogout, jacIsLoggedIn }
 import "./styles.css";
 
-import from components.ProductItem { ProductItem }
 import from components.StoreItem { StoreItem }
 import from components.StoreEntryItem { StoreEntryItem }
 import from components.AuthForm { AuthForm }
@@ -61,7 +60,6 @@ def:pub app -> any {
 
     can with [isLoggedIn] entry {
         if isLoggedIn {
-            fetchProducts();
             fetchStoreEntries();
         }
     }
@@ -88,6 +86,7 @@ def:pub app -> any {
     async def addStoreEntry -> None;
     async def deleteStoreEntry(storeId: str) -> None;
     def handleStoreEntryKeyPress(e: any) -> None;
+    async def addStoreEntryDirect(name: str) -> None;   # <-- ADD THIS
 
     # --- Routing methods ---
     def navigateToStoreProducts(store: any) -> None;
@@ -135,51 +134,6 @@ def:pub app -> any {
                     </div>
                     <div className="two-column-layout">
                         <div className="column-left">
-                            <div className="card">
-                                <h2 className="panel-title">Products</h2>
-                                <div className="add-row">
-                                    <input
-                                        type="text"
-                                        value={newProductName}
-                                        onChange={lambda e: any -> None { newProductName = e.target.value; }}
-                                        onKeyPress={handleProductKeyPress}
-                                        placeholder="Enter product name..."
-                                        className="todo-input"
-                                    />
-                                    <button
-                                        onClick={lambda -> None { addProduct(); }}
-                                        className="btn-add"
-                                    >
-                                        Add
-                                    </button>
-                                </div>
-                            </div>
-                            <div className="card">
-                                {(
-                                    <div className="loading-message">Loading products...</div>
-                                ) if productsLoading else (
-                                    <div>
-                                        {(
-                                            <div className="empty-message">
-                                                No products yet. Add one above!
-                                            </div>
-                                        ) if products.length == 0 else (
-                                            <div>
-                                                {[
-                                                    <ProductItem
-                                                        key={product.id}
-                                                        product={product}
-                                                        isSelected={product.id == selectedProductId}
-                                                        onSelect={selectProduct}
-                                                        onDelete={deleteProduct}
-                                                    /> for product in products
-                                                ]}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-
                             <div className="card">
                                 <h2 className="panel-title">Stores</h2>
                                 <p className="panel-subtitle">
@@ -267,38 +221,53 @@ def:pub app -> any {
                                     </div>
                                 ) if locationError else None}
 
-                                # --- Nearby store results ---
-                                {(
-                                    <div style={{"marginTop": "1rem"}}>
-                                        {[
-                                            <div
-                                                key={nearbyStore.place_id}
-                                                className="ingredient-item"
-                                                style={{"flexDirection": "column", "alignItems": "flex-start", "gap": "0.25rem"}}
-                                            >
-                                                <div style={{"display": "flex", "justifyContent": "space-between", "width": "100%", "alignItems": "center"}}>
-                                                    <div>
-                                                        <span className="ingredient-name">{nearbyStore.name}</span>
-                                                        <span style={{
-                                                            "fontSize": "0.75rem",
-                                                            "color": "rgba(255,255,255,0.4)",
-                                                            "marginLeft": "0.5rem"
-                                                        }}>
-                                                            {nearbyStore.store_type}
-                                                        </span>
-                                                    </div>
+                            # --- Nearby store results ---
+                            {(
+                                <div style={{"marginTop": "1rem"}}>
+                                    {[
+                                        <div
+                                            key={nearbyStore.place_id}
+                                            className="ingredient-item"
+                                            style={{"flexDirection": "column", "alignItems": "flex-start", "gap": "0.25rem"}}
+                                        >
+                                            <div style={{"display": "flex", "justifyContent": "space-between", "width": "100%", "alignItems": "center"}}>
+                                                <div>
+                                                    <span className="ingredient-name">{nearbyStore.name}</span>
+                                                    <span style={{
+                                                        "fontSize": "0.75rem",
+                                                        "color": "rgba(255,255,255,0.4)",
+                                                        "marginLeft": "0.5rem"
+                                                    }}>
+                                                        {nearbyStore.store_type}
+                                                    </span>
+                                                </div>
+                                                <div style={{"display": "flex", "alignItems": "center", "gap": "0.75rem"}}>
                                                     <span style={{"fontSize": "0.85rem", "color": "#4ade80", "fontWeight": "600", "whiteSpace": "nowrap"}}>
                                                         {nearbyStore.distance} mi
                                                     </span>
+                                                    <button
+                                                        onClick={lambda -> None { addStoreEntryDirect(nearbyStore.name); }}
+                                                        className="btn-add"
+                                                        style={{
+                                                            "fontSize": "0.75rem",
+                                                            "padding": "0.3rem 0.65rem",
+                                                            "whiteSpace": "nowrap",
+                                                            "background": "rgba(59,130,246,0.25)",
+                                                            "border": "1px solid rgba(59,130,246,0.4)"
+                                                        }}
+                                                        title={"Add " + nearbyStore.name + " to your store list"}
+                                                    >
+                                                        + Add Store
+                                                    </button>
                                                 </div>
-                                                <span style={{"fontSize": "0.75rem", "color": "rgba(255,255,255,0.5)"}}>
-                                                    {nearbyStore.address}
-                                                </span>
-                                            </div> for nearbyStore in nearbyStores
-                                        ]}
-                                    </div>
-                                ) if nearbyStores.length > 0 else None}
-                            </div>
+                                            </div>
+                                            <span style={{"fontSize": "0.75rem", "color": "rgba(255,255,255,0.5)"}}>
+                                                {nearbyStore.address}
+                                            </span>
+                                        </div> for nearbyStore in nearbyStores
+                                    ]}
+                                </div>
+                            ) if nearbyStores.length > 0 else None}
 
                             # --- Price comparison panel ---
                             {(
