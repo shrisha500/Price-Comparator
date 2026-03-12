@@ -26,7 +26,7 @@ def:pub StoreProductsPage(
     return
         <div className="app-container">
             <div className="app-content">
-                # --- Header with Back button ---
+               
                 <div className="card">
                     <div className="card-header">
                         <div style={{"display": "flex", "alignItems": "center", "gap": "1rem"}}>
@@ -70,7 +70,7 @@ def:pub StoreProductsPage(
 
                 <div className="card">
                     <h2 className="panel-title">Products</h2>
-                    # Search/filter bar
+                  
                     <div style={{"marginBottom": "1rem"}}>
                         <input
                             type="text"
