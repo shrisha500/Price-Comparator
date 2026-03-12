@@ -183,7 +183,7 @@ def:pub app -> JsxElement {
                         </div>
 
                         <div className="column-right">
-                            # --- Location Search ---
+                           
                             <div className="card">
                                 <h2 className="panel-title">Find Nearby Stores</h2>
                                 <p className="panel-subtitle">
@@ -221,7 +221,7 @@ def:pub app -> JsxElement {
                                     </div>
                                 ) if locationError else None}
 
-                            # --- Nearby store results ---
+                           
                             {(
                                 <div style={{"marginTop": "1rem"}}>
                                     {[
@@ -269,7 +269,7 @@ def:pub app -> JsxElement {
                                 </div>
                             ) if nearbyStores.length > 0 else None}
                             </div>
-                            # --- Price comparison panel ---
+                           
                             {(
                                 <div className="card">
                                     <div className="empty-message">
