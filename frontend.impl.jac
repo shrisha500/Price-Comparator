@@ -181,9 +181,11 @@ impl app.navigateToStoreProducts(store: any) -> None {
     currentPage = "store-products";
 }
 
-impl app.navigateHome -> None {
-    currentPage = "home";
-    selectedStoreEntry = None;
+impl app.navigateTo(page: str) -> None {
+    currentPage = page;
+    if page == "home" {
+        selectedStoreEntry = None;
+    }
 }
 
 # --- Location search (LLM-powered) ---

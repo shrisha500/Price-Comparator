@@ -392,3 +392,15 @@ walker:priv FindNearbyStores {
         ];
     }
 }
+
+"""Provide a helpful response to the user's latest message given the conversation history."""
+def ask_ai(history: list[dict]) -> str by llm();
+
+walker:pub AskAI {
+    has history: list;
+
+    can answer with Root entry {
+        response = ask_ai(self.history);
+        report {"response": response};
+    }
+}
