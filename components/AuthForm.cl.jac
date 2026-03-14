@@ -21,6 +21,11 @@ def:pub AuthForm(
                     <p className="app-subtitle">
                         Compare prices across stores with AI
                     </p>
+                    <h2>
+                        {(
+                            "Sign Up" if isSignup else "Sign In"
+                        )}
+                    </h2>
                 </div>
                 <form onSubmit={onSubmit}>
                     <div className="form-group">
