@@ -62,7 +62,7 @@ def find_nearby_stores(location: str) -> list[NearbyStore] by llm();
 """You are a helpful shopping assistant for a price comparator app.
 Given the conversation history, provide helpful advice about products,
 pricing strategies, and where to buy. Be concise and practical."""
-def ask_ai(history: list[dict]) -> str by llm();
+def ask_ai(history: list[dict]) -> str by llm(tools=[DDGS]);
 
 """Extract the store name and price from a search result snippet for the given product.
 If no price is found, set price to 0.0 and available to false."""
