@@ -10,7 +10,13 @@ cl {
 
 import from byllm.lib { Model }
 import from uuid { uuid4 }
-import from duckduckgo_search { DDGS }
+import from ddgs { DDGS }
+
+def web_search(query: str, max_results: int = 10) -> list[dict] {
+    ddgs = DDGS();
+    results = [r for r in ddgs.text(query, max_results=max_results)];
+    return results;
+}
 
 glob llm = Model(model_name="gemini/gemini-2.5-flash");
 
@@ -61,8 +67,8 @@ def find_nearby_stores(location: str) -> list[NearbyStore] by llm();
 
 """You are a helpful shopping assistant for a price comparator app.
 Given the conversation history, provide helpful advice about products,
-pricing strategies, and where to buy. Be concise and practical."""
-def ask_ai(history: list[dict]) -> str by llm(tools=[DDGS]);
+pricing strategies, and where to buy. Be concise and practical. Use the web search tool to find live prices if the user asks for it, and summarize the findings in your response."""
+def ask_ai(history: list[dict]) -> str by llm(tools=[web_search]);
 
 """Extract the store name and price from a search result snippet for the given product.
 If no price is found, set price to 0.0 and available to false."""
@@ -410,34 +416,15 @@ walker:priv FindNearbyStores {
     }
 }
 
-# --- Live Price Search Walker (DuckDuckGo) ---
-
 walker:pub LivePriceSearch {
     has product_name: str;
 
     can run with Root entry {
-        raw_results = [];
 
-        # 1. Search DuckDuckGo for prices across major stores
-        try {
-            with DDGS() as ddgs {
-                search_results = ddgs.text(
-                    self.product_name + " price buy site:amazon.com OR site:walmart.com OR site:bestbuy.com OR site:target.com OR site:ebay.com",
-                    max_results=10
-                );
-                for r in search_results {
-                    raw_results.append({
-                        "title": r["title"],
-                        "snippet": r["body"],
-                        "url": r["href"],
-                        "source": r["href"].split("/")[2].replace("www.", "")
-                    });
-                }
-            }
-        } except Exception as e {
-            report {"error": "Search failed: " + str(e)};
-            return;
-        }
+        # 1. Call the web_search wrapper — no DDGS boilerplate here
+        raw_results = web_search(
+            self.product_name + " price buy site:amazon.com OR site:walmart.com OR site:bestbuy.com OR site:target.com OR site:ebay.com"
+        );
 
         if len(raw_results) == 0 {
             report {"error": "No search results found for " + self.product_name};
@@ -446,21 +433,20 @@ walker:pub LivePriceSearch {
 
         # 2. Use AI to extract prices from each snippet
         extracted_prices = [];
-        for result in raw_results {
+        for r in raw_results {
             try {
                 extracted = extract_price_from_snippet(
                     self.product_name,
-                    result["snippet"],
-                    result["source"]
+                    r["body"],
+                    r["href"].split("/")[2].replace("www.", "")
                 );
-                # Only keep results where AI found a valid price
                 if extracted.price > 0.0 {
                     extracted_prices.append({
-                        "store": extracted.store_name,
-                        "price": extracted.price,
-                        "currency": extracted.currency,
+                        "store"    : extracted.store_name,
+                        "price"    : extracted.price,
+                        "currency" : extracted.currency,
                         "available": extracted.available,
-                        "url": result["url"]
+                        "url"      : r["href"]
                     });
                 }
             } except Exception as e {
@@ -473,16 +459,16 @@ walker:pub LivePriceSearch {
             return;
         }
 
-        # 3. Run AI analysis on extracted prices
+        # 3. AI analysis
         analysis = analyze_prices(self.product_name, extracted_prices);
 
         report {
-            "product": self.product_name,
-            "prices": extracted_prices,
+            "product" : self.product_name,
+            "prices"  : extracted_prices,
             "analysis": {
-                "best_store": analysis.best_store,
-                "worst_store": analysis.worst_store,
-                "avg_price": analysis.avg_price,
+                "best_store"    : analysis.best_store,
+                "worst_store"   : analysis.worst_store,
+                "avg_price"     : analysis.avg_price,
                 "recommendation": analysis.recommendation
             }
         };
